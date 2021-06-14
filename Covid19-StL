@@ -1,0 +1,247 @@
+library(shiny)
+library(shinydashboard)
+library(ggplot2)
+library(dplyr)
+library(plotly)
+library(DT)
+library(tidyverse)
+library(urbnmapr)
+library(urbnthemes)
+
+#loading data from github and csv
+
+data1 <- read.csv("mo1_covid19.csv",stringsAsFactors = F)
+data2 <- read.csv("mo2_covid19.csv",stringsAsFactors = F)
+
+temp <- read.csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/10-07-2020.csv", header=T)
+main <- temp %>% rename(County = Admin2, `County,State,Country` = Combined_Key, Country = Country_Region, State = Province_State)
+
+MO_data <- main %>% filter(Country == "US", State == "Missouri")
+
+temp_map <- read.csv("https://raw.githubusercontent.com/Lucas-Czarnecki/COVID-19-CLEANED-JHUCSSE/master/COVID-19_CLEAN/csse_covid_19_time_series_cleaned/time_series_covid19_tidy_US.csv", header=T)
+
+temp_map <- temp_map %>% rename(State = Province_State, County = Admin2, Country = Country_Region)
+
+main_series <- temp_map %>% filter(State == "Missouri")
+
+ui <- dashboardPage(
+  dashboardHeader(title = "COVID-19 Dashboard"),
+  dashboardSidebar(sidebarMenu(
+            menuItem("Dashboard", tabName = "dashboard", icon = icon("dashboard")),
+            menuItem("MO Testing Sites", tabName = "mosites", icon = icon("table")),
+            selectInput("Cases","Cases by County",choices = c("All Counties"= "null",as.character(MO_data$County)))
+             )
+          ),
+  
+  dashboardBody(
+ 
+            tabItems(
+                # Dashboard tab content
+                tabItem(tabName = "dashboard",
+                        fluidRow(
+                            column(width = 12,
+                                   valueBoxOutput("confirmed", width = 3),
+                                   valueBoxOutput("deaths", width = 3),
+                                   valueBoxOutput("recovered", width = 3),
+                                   valueBoxOutput("active", width = 3))
+                            ),
+                       
+                       fluidRow(
+                         box(width = 12, title = "Map of Missouri",plotlyOutput("map", height = "600px"))
+                       ),
+                         fluidRow(
+    box(width = 12,title = "Confirmed Cases",plotlyOutput("g", height = "360px")),
+    box(width = 12,title = "MO cases by Age Range",plotlyOutput("ar", height = "360px"))
+    ),
+    
+  fluidRow(
+    
+    box(
+     width = 12, 
+     title = "Missouri Cases",
+     dataTableOutput("MOtable"))
+                      )
+  ),
+                tabItem(tabName = "mosites",
+                        fluidPage(
+                            column(width = 12, 
+                                   h4("Below is a list of hospitals where testing is offered at an alternate location.", strong("Please call the site you wish to visit before visiting the hospital or testing location to determine testing eligibility."), "Many sites still require physician orders or evaluation before testing is approved."),
+                                   box(width = 14, title = "Information about Missouri Testing Sites",
+                                       dataTableOutput("hosp")) 
+                            ))
+                        )
+                
+            
+              )
+)
+
+)
+
+server <- function(input, output, session) { 
+  
+  Total <- reactive({
+    if (identical(input$Cases, "null")) 
+      MO_data %>% 
+        summarise(confirmed = sum(Confirmed),
+                  deaths = sum(Deaths),
+                  recov = sum(Recovered),
+                  actv = sum(Active))
+    else
+      MO_data %>% filter(County == input$Cases) %>%
+                summarise(confirmed = sum(Confirmed),
+                          deaths = sum(Deaths),
+                          recov = sum(Recovered),
+                          actv = sum(Active))
+      
+  })
+  
+    
+  #creating the valueBoxOutput content
+  #Dashboard Page
+  output$confirmed <- renderValueBox({
+    
+    valueBox(
+      formatC(Total()$confirmed, format="d", big.mark=',')
+      ,'Total Cases'
+      ,color = "light-blue")
+    
+  })
+   
+   output$deaths <- renderValueBox({
+    
+    valueBox(
+      formatC(Total()$deaths, format="d", big.mark=',')
+      ,'Total Deaths'
+      , color = "light-blue")
+    
+  })
+  
+   output$recovered <- renderValueBox({
+    
+    valueBox(
+      formatC(Total()$recov, format="d", big.mark=',')
+      ,'Recovered'
+      ,color = "light-blue")
+    
+  })
+   
+   output$active <- renderValueBox({
+    
+    valueBox(
+      formatC(Total()$actv, format="d", big.mark=',')
+      ,'Active'
+      ,color = "light-blue")
+    
+  })
+   
+   # Age Range Bar Graph
+   
+   output$ar <- renderPlotly({
+     ggplotly(
+       ggplot(data1 %>% mutate(AgeRange, c("< 20", "20-24", "25-29", "30-34", "35-39", "40-44", "45-49", 
+                                                 "50-54", "55-59", "60-64", "65-69", "70-74", "75-79", "80+", "Unknown")),
+              aes(x=AgeRange, y = NoOfCases )) + 
+         geom_bar(position = "dodge", stat = "identity", color= "grey", fill = "lightgrey")+
+         labs(x = "Age Range for Positive Cases",
+                     y = "Number of Cases")+
+                theme(legend.position = "none" )
+     ) %>% layout(hoverlabel=list(bgcolor="white"))
+  })
+   
+   # Time Series graph
+   
+   tstab <- reactive({
+          if (identical(input$Cases, "null"))
+            ggplotly(
+ggplot(main_series%>% mutate(Date = as.Date(Date)) %>% group_by(Date) %>% summarise(Confirmed = sum(Confirmed)),aes(x=Date, y= Confirmed))+
+  geom_line(color = "black", size = 0.5)+ 
+                labs(x = "Date",
+                     y = "Confirmed")
+)%>% layout(hoverlabel=list(bgcolor="white"))
+          else 
+            ggplotly(
+ggplot(main_series %>% filter(County == input$Cases) %>% mutate(Date = as.Date(Date)) %>% group_by(Date) %>% summarise(Confirmed = sum(Confirmed)),aes(x=Date, y= Confirmed, text = paste0("County: ", input$Cases)))+
+  geom_line(color = "black", size = 0.5)+ 
+                labs(x = "Date",
+                     y = "Confirmed")
+)%>% layout(hoverlabel=list(bgcolor="white"))
+        })
+   
+   
+   output$g <- renderPlotly({
+    tstab()
+  })
+   
+   
+   
+   # Missouri Cases table
+   momtab <- reactive({
+          mo <- MO_data %>% select(FIPS, County, State, Country, Confirmed, Deaths, Recovered, Active, Last_Update)
+          if (identical(input$Cases, "null"))
+            datatable(mo)
+          else 
+            datatable(mo %>% filter(County == input$Cases))
+        })
+   
+ 
+   output$MOtable <- renderDataTable({
+       momtab()
+       })
+   
+   # MO testing site tab
+   
+   mot <- reactive({
+     test <- data2 %>% select(Hospital.Names,Phone.Numbers,County)
+     if(identical(input$Cases, "null"))
+       datatable(test)
+     else
+       datatable(test %>% filter(County == input$Cases))
+     
+   })
+   
+    output$hosp <- renderDataTable({
+       mot()
+        })
+    
+    # Map output 
+    
+    mapot <- reactive ({
+     if(identical(input$Cases, "null"))
+       ggplotly(
+        countydata %>%
+        left_join(counties, by = "county_fips") %>%
+        filter(state_name =="Missouri") %>% left_join(MO_data %>% mutate(county_fips = as.character(FIPS)), by = "county_fips") %>%
+        ggplot(mapping = aes(long, lat, group = group, fill = Confirmed, text = County)) +
+    geom_polygon(color = "#ffffff", size = .25) +
+    scale_fill_gradientn(guide = guide_colorbar(title.position = "top"))+
+    coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+    theme(legend.title = element_text(),
+    legend.key.width = unit(.5, "in")) +
+    labs(x="", y= ""),
+    tooltip = c('text','Confirmed')
+      )%>% layout(hoverlabel=list(bgcolor="white"))
+      
+     else
+       ggplotly(
+        countydata %>%
+        left_join(counties, by = "county_fips") %>%
+        filter(state_name =="Missouri") %>% left_join(MO_data %>% filter(County == input$Cases) %>% mutate(county_fips = as.character(FIPS)), by = "county_fips") %>%
+        ggplot(mapping = aes(long, lat, group = group, fill = Confirmed, text = County)) +
+    geom_polygon(color = "#ffffff", size = .25, show.legend = FALSE) +
+    coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+    labs(x="", y= ""),
+    tooltip = c('text','Confirmed')
+      )%>% layout(hoverlabel=list(bgcolor="white"))
+      
+      })
+    
+       output$map <- renderPlotly({
+      mapot()
+    })
+  
+    
+    }
+
+
+
+shinyApp(ui, server)
