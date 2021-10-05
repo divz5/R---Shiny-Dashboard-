@@ -15,4 +15,4 @@ Hospital Data - https://health.mo.gov/living/healthcondiseases/communicable/nove
 Age Range Data - https://health.mo.gov/living/healthcondiseases/communicable/novel-coronavirus/data/
 
 
-This project was used to display the COVID 2019 cases in St.Louis, MO. The Dashboard consists of 4 sections to display the number of confirmed cases, the number of deaths, the number of people who have recovered and the number of active cases. There is a separate tab to display the Hospital sites, phone numbers and a map 
+This project was used to display the COVID 2019 cases in Missouri. The Dashboard consists of 4 header boxes to display the number of confirmed cases, the number of deaths, the number of people who have recovered and the number of active cases. The bottom of the Dashboard consists of a Time Series Graph and a bar graph displaying the cases by Age Group. A dropdown list consisting of counties in Missouri is used to change the stats being displayed in the Dashboard according to the selected county. A separate tab is used to display the Hospital testing sites with phone numbers and a map of MO.
